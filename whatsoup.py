@@ -12,20 +12,27 @@ from selenium.webdriver.support import expected_conditions
 from selenium.webdriver.common.by import By
 from selenium.common.exceptions import TimeoutException, NoSuchElementException, StaleElementReferenceException, ElementNotInteractableException
 from prettytable import PrettyTable
-from dotenv import load_dotenv
+from selenium.webdriver.common.by import By
+import time
+
 from timeit import default_timer as timer
 
 
 def main():
     # Setup selenium to use Chrome browser w/ profile options
-    driver = setup_selenium()
+    #ndriver = setup_selenium()
+    
+    chrome_options = webdriver.ChromeOptions()
+    chrome_options.add_argument(r'--profile-directory=Profile 1')
+    chrome_options.add_argument("user-data-dir=C:\\Users\\30092820\\AppData\\Local\\Google\\Chrome\\User Data\\Profile 1\\Default")
+    driver = webdriver.Chrome(options=chrome_options)
 
     # Load WhatsApp
     if not whatsapp_is_loaded(driver):
         print("You've quit WhatSoup.")
         driver.quit()
         return
-
+    time.sleep(5)
     # Get chats
     chats = get_chats(driver)
 
@@ -54,7 +61,7 @@ def main():
                     chat_is_loadable = True
                 else:
                     # Clear chat search
-                    driver.find_element_by_xpath(
+                    driver.find_element("xpath",
                         '//*[@id="side"]/div[1]/div/span/button').click()
 
             # Load entire chat history
@@ -79,9 +86,11 @@ def setup_selenium():
     '''Setup Selenium to use Chrome webdriver'''
 
     # Load driver and chrome profile from local directories
-    load_dotenv()
+    #load_dotenv()
     DRIVER_PATH = os.getenv('DRIVER_PATH')
-    CHROME_PROFILE = os.getenv('CHROME_PROFILE')
+    CHROME_PROFILE = "Samuel"
+
+    webdriver = webdriver.Chrome()
 
     # Configure selenium
     options = webdriver.ChromeOptions()
@@ -162,8 +171,9 @@ def get_chats(driver):
         # Try traversing the chat-pane
         try:
             # Find the chat search (xpath == 'Search or start new chat' element)
-            chat_search = driver.find_element_by_xpath(
-                '//*[@id="side"]/div[1]/div/label/div/div[2]')
+            chat_search = driver.find_element("xpath",
+                #'//*[@id="side"]/div[1]/div/label/div/div[2]')
+                '/html/body/div[1]/div/div/div[2]/div[3]/div/div[1]/div/div[2]/button/div[2]/span')
             chat_search.click()
 
             # Count how many chat records there are below the search input by using keyboard navigation because HTML is dynamically changed depending on viewport and location in DOM
@@ -191,25 +201,26 @@ def get_chats(driver):
                     break
                 else:
                     # Get the container of the contact card's title (xpath == parent div container to the span w/ title attribute set to chat name)
-                    contact_title_container = selected_chat.find_element_by_xpath(
+                    contact_title_container = selected_chat.find_element("xpath",
                         "./div/div[2]/div/div[1]")
                     # Then get all the spans it contains
-                    contact_title_container_spans = contact_title_container.find_elements_by_tag_name(
+                    contact_title_container_spans = contact_title_container.find_elements(By.TAG_NAME,
                         'span')
                     # Then loop through all those until we find one w/ a title property
                     for span_title in contact_title_container_spans:
                         if span_title.get_property('title'):
                             name_of_chat = span_title.get_property('title')
+                            
                             break
 
                     # Get the time (xpath == div element that holds last chat time e.g. 'Wednesday' or '1/1/2021')
-                    last_chat_time = selected_chat.find_element_by_xpath(
+                    last_chat_time = selected_chat.find_element("xpath",
                         "./div/div[2]/div/div[2]").text
 
                     # Get the last message (xpath == div element that holds a span w/ title attribute set to last chat message)
-                    last_chat_msg_element = selected_chat.find_element_by_xpath(
+                    last_chat_msg_element = selected_chat.find_element("xpath",
                         "./div/div[2]/div[2]/div")
-                    last_chat_msg = last_chat_msg_element.find_element_by_tag_name(
+                    last_chat_msg = last_chat_msg_element.find_element(By.TAG_NAME,
                         'span').get_attribute('title')
 
                     # Strip last message of left-to-right directional encoding ('\u202a' and '\u202c') if it exists
@@ -220,7 +231,7 @@ def get_chats(driver):
                             u'\u202c')
 
                     # Check if last message is a group chat and if so prefix the senders name to the message
-                    last_chat_msg_sender = last_chat_msg_element.find_element_by_tag_name(
+                    last_chat_msg_sender = last_chat_msg_element.find_element(By.TAG_NAME,
                         'span').text
                     if '\n: \n' in last_chat_msg_sender:
                         # Group have multiple spans to separate sender, colon, and msg contents e.g. '<sender>: <msg>', so we take the first item after splitting to capture the senders name
@@ -233,6 +244,7 @@ def get_chats(driver):
                     # Store chat info within a dict
                     chat = {"name": name_of_chat,
                             "time": last_chat_time, "message": last_chat_msg}
+                    print(chat)
                     chats.append(chat)
 
             # Navigate back to the top of the chat list
@@ -367,7 +379,7 @@ def load_selected_chat(driver):
     print("Loading messages...", end="\r")
 
     # Set focus to chat window (xpath == div element w/ aria-label set to 'Message list. Press right arrow key...')
-    message_list_element = driver.find_element_by_xpath(
+    message_list_element = driver.find_element("xpath",
         "//*[@id='main']/div[3]/div/div/div[contains(@aria-label,'Message list')]")
     message_list_element.send_keys(Keys.NULL)
 
@@ -408,7 +420,7 @@ def load_selected_chat(driver):
         # Check if all messages were loaded or retry loading more
         elif current_scroll_height == previous_scroll_height:
             # All messages loaded? (xpath == 'load earlier messages' / 'loading messages...' div that is deleted from DOM after all messages have loaded)
-            loading_earlier_msgs = driver.find_element_by_xpath(
+            loading_earlier_msgs = driver.find_element("xpath",
                 '//*[@id="main"]/div[3]/div/div/div[2]/div').get_attribute('title')
             if 'load' not in loading_earlier_msgs:
                 all_msgs_loaded = True
@@ -458,8 +470,9 @@ def find_selected_chat(driver, selected_chat):
     print(f"Searching for '{selected_chat}'...", end="\r")
 
     # Find the chat via search (xpath == 'Search or start new chat' element)
-    chat_search = driver.find_element_by_xpath(
-        '//*[@id="side"]/div[1]/div/label/div/div[2]')
+    chat_search = driver.find_element("xpath",
+        #'//*[@id="side"]/div[1]/div/label/div/div[2]')
+    '/html/body/div[1]/div/div/div[2]/div[3]/div/div[1]/div/div[2]/button/div[2]/span')
     chat_search.click()
 
     # Type the chat name into the search box using a JavaScript hack because Selenium/Chromedriver doesn't support all unicode chars - https://bugs.chromium.org/p/chromedriver/issues/detail?id=2269
@@ -500,7 +513,7 @@ def find_selected_chat(driver, selected_chat):
             return False
         else:
             # Get the chat name (xpath == span w/ title set to chat name, a descendant of header tag and anchored at top of chat window)
-            chat_name_header = driver.find_element_by_xpath(
+            chat_name_header = driver.find_element("xpath",
                 '//*[@id="main"]/header/div[2]/div[1]/div/span').get_attribute('title')
 
             # Compare searched chat name to the selected chat name
@@ -522,7 +535,7 @@ def scrape_chat(driver):
     soup = BeautifulSoup(driver.page_source, 'lxml')
 
     # Get the 'Message list' element that is a container for all messages in the right chat pane
-    message_list = driver.find_element_by_xpath(
+    message_list = driver.find_element("xpath",
         '//*[@id="main"]/div[3]/div/div/div[2]').get_attribute('class')
 
     # Search for and only keep HTML elements which contain actual messages
