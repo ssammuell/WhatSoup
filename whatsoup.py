@@ -35,9 +35,11 @@ def main():
     time.sleep(5)
     # Get chats
     chats = get_chats(driver)
+    
+    
 
     # Print chat summary
-    print_chats(chats)
+    print_chats(chats,full=True)
 
     # Prompt user to select a chat for export, then locate and load it in WhatsApp
     finished = False
@@ -200,64 +202,76 @@ def get_chats(driver):
                 if is_last_chat:
                     break
                 else:
-                    # Get the container of the contact card's title (xpath == parent div container to the span w/ title attribute set to chat name)
-                    contact_title_container = selected_chat.find_element("xpath",
-                        "./div/div[2]/div/div[1]")
-                    # Then get all the spans it contains
-                    contact_title_container_spans = contact_title_container.find_elements(By.TAG_NAME,
-                        'span')
-                    # Then loop through all those until we find one w/ a title property
-                    for span_title in contact_title_container_spans:
-                        if span_title.get_property('title'):
-                            name_of_chat = span_title.get_property('title')
+                    if (selected_chat.text != 'All'):
+                        #print(selected_chat.get_attribute("outerHTML"))
+                        #print(selected_chat.text)
+                        
+                        # Get the container of the contact card's title (xpath == parent div container to the span w/ title attribute set to chat name)
+                        contact_title_container = selected_chat.find_element("xpath",
+                            "./div/div[2]/div/div[1]")
+                        
+                        # Then get all the spans it contains
+                        contact_title_container_spans = contact_title_container.find_elements(By.TAG_NAME,
+                            'span')
+                        # Then loop through all those until we find one w/ a title property
+                        for span_title in contact_title_container_spans:
+                            if span_title.get_property('title'):
+                                name_of_chat = span_title.get_property('title')                                                                
+                                break
+                             
+                        # Get the time (xpath == div element that holds last chat time e.g. 'Wednesday' or '1/1/2021')
+                        last_chat_time = selected_chat.find_element("xpath",
+                            "./div/div[2]/div/div[2]").text
+                        
+                        # Get the last message (xpath == div element that holds a span w/ title attribute set to last chat message)
+                        last_chat_msg_element = selected_chat.find_element("xpath",
+                            "./div/div[2]/div[2]/div")
+                        
+                        last_chat_msg = last_chat_msg_element.find_element(By.TAG_NAME,
+                            'span').get_attribute('title')
+                        
+                        # Strip last message of left-to-right directional encoding ('\u202a' and '\u202c') if it exists
+                        if '\u202a' in last_chat_msg or '\u202c' in last_chat_msg:
+                            last_chat_msg = last_chat_msg.lstrip(
+                                u'\u202a')
+                            last_chat_msg = last_chat_msg.rstrip(
+                                u'\u202c')
+                        
+                        # Check if last message is a group chat and if so prefix the senders name to the message
+                        last_chat_msg_sender = last_chat_msg_element.find_element(By.TAG_NAME,
+                            'span').text
+                        
+                        if '\n: \n' in last_chat_msg_sender:
+                            # Group have multiple spans to separate sender, colon, and msg contents e.g. '<sender>: <msg>', so we take the first item after splitting to capture the senders name
+                            last_chat_msg_sender = last_chat_msg_sender.split('\n')[
+                                0]
                             
-                            break
 
-                    # Get the time (xpath == div element that holds last chat time e.g. 'Wednesday' or '1/1/2021')
-                    last_chat_time = selected_chat.find_element("xpath",
-                        "./div/div[2]/div/div[2]").text
+                            # Prefix the message w/ senders name
+                            last_chat_msg = f"{last_chat_msg_sender}: {last_chat_msg}"
+                        
+                        # Store chat info within a dict
+                        chat = {"name": name_of_chat,
+                                "time": last_chat_time, "message": last_chat_msg}                        
+                        
+                        chats.append(chat)
 
-                    # Get the last message (xpath == div element that holds a span w/ title attribute set to last chat message)
-                    last_chat_msg_element = selected_chat.find_element("xpath",
-                        "./div/div[2]/div[2]/div")
-                    last_chat_msg = last_chat_msg_element.find_element(By.TAG_NAME,
-                        'span').get_attribute('title')
-
-                    # Strip last message of left-to-right directional encoding ('\u202a' and '\u202c') if it exists
-                    if '\u202a' in last_chat_msg or '\u202c' in last_chat_msg:
-                        last_chat_msg = last_chat_msg.lstrip(
-                            u'\u202a')
-                        last_chat_msg = last_chat_msg.rstrip(
-                            u'\u202c')
-
-                    # Check if last message is a group chat and if so prefix the senders name to the message
-                    last_chat_msg_sender = last_chat_msg_element.find_element(By.TAG_NAME,
-                        'span').text
-                    if '\n: \n' in last_chat_msg_sender:
-                        # Group have multiple spans to separate sender, colon, and msg contents e.g. '<sender>: <msg>', so we take the first item after splitting to capture the senders name
-                        last_chat_msg_sender = last_chat_msg_sender.split('\n')[
-                            0]
-
-                        # Prefix the message w/ senders name
-                        last_chat_msg = f"{last_chat_msg_sender}: {last_chat_msg}"
-
-                    # Store chat info within a dict
-                    chat = {"name": name_of_chat,
-                            "time": last_chat_time, "message": last_chat_msg}
-                    print(chat)
-                    chats.append(chat)
-
+            
             # Navigate back to the top of the chat list
+            print('10')
             chat_search.click()
-            chat_search.send_keys(Keys.DOWN)
-
+            print('20')
+            #chat_search.send_keys(Keys.DOWN)
+            
             print("Success! Your chats have been loaded.")
             break
 
         # Catch errors related to DOM changes
         except (StaleElementReferenceException, ElementNotInteractableException) as e:
+            print('salto alguna excepcion')
+            
             if retry_attempts == 3:
-                # Make sure we grant user option to exit if DOM keeps changing while scanning chat list
+            # Make sure we grant user option to exit if DOM keeps changing while scanning chat list
                 print("This is taking longer than usual...")
                 while True:
                     response = input(
@@ -281,7 +295,7 @@ def get_chats(driver):
 
 
 def print_chats(chats, full=False):
-    '''Prints a summary of the scraped chats'''
+    print('Prints a summary of the scraped chats')
 
     # Print a full summary of the scraped chats
     if full:
@@ -472,18 +486,24 @@ def find_selected_chat(driver, selected_chat):
     # Find the chat via search (xpath == 'Search or start new chat' element)
     chat_search = driver.find_element("xpath",
         #'//*[@id="side"]/div[1]/div/label/div/div[2]')
-    '/html/body/div[1]/div/div/div[2]/div[3]/div/div[1]/div/div[2]/button/div[2]/span')
+        '//*[@id="side"]/div[1]/div/div[2]/div[2]/div/div[1]')
+    
     chat_search.click()
 
     # Type the chat name into the search box using a JavaScript hack because Selenium/Chromedriver doesn't support all unicode chars - https://bugs.chromium.org/p/chromedriver/issues/detail?id=2269
-    driver.execute_script(
-        f"arguments[0].innerHTML = '{selected_chat}'", chat_search)
-
+    
+    
+    searchTextField=chat_search.find_element(By.TAG_NAME,"p")
+    print(searchTextField.get_attribute("outerHTML"))
+    searchTextField.send_keys(selected_chat)
+    #driver.execute_script("arguments[0].innerText = '{selected_chat}'", searchTextField)
+    #driver.execute_script(f"arguments[0].innerText = 'what_you_want_to_show'", element)
+   
     # Manually fire the JS listeners/events with keyboard input that adds/removes a space at end of search string
     chat_search.send_keys(Keys.END)
     chat_search.send_keys(Keys.SPACE)
     chat_search.send_keys(Keys.BACKSPACE)
-
+    print('........')
     # Wait for search results to load (5 sec max)
     try:
         # Look for the unique class that holds 'Search results.'
