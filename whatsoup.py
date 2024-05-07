@@ -23,8 +23,8 @@ def main():
     #ndriver = setup_selenium()
     
     chrome_options = webdriver.ChromeOptions()
-    chrome_options.add_argument(r'--profile-directory=Profile 1')
-    chrome_options.add_argument("user-data-dir=C:\\Users\\30092820\\AppData\\Local\\Google\\Chrome\\User Data\\Profile 1\\Default")
+    chrome_options.add_argument('--profile-directory=Profile 1')
+    chrome_options.add_argument("user-data-dir=C:\\Users\\30092820\\AppData\\Local\\Temp\\scoped_dir3316_1435834728\\Profile 1")
     driver = webdriver.Chrome(options=chrome_options)
 
     # Load WhatsApp
@@ -58,13 +58,15 @@ def main():
 
                 # Find the selected chat in WhatsApp
                 found_selected_chat = find_selected_chat(driver, selected_chat)
+                print('---->he encontrado el chat que he filtrado:'+str(found_selected_chat))
+                chat_is_loadable = True
                 if found_selected_chat:
                     # Break and proceed to load/scrape the chat
                     chat_is_loadable = True
                 else:
                     # Clear chat search
-                    driver.find_element("xpath",
-                        '//*[@id="side"]/div[1]/div/span/button').click()
+                    #driver.find_element("xpath",'//*[@id="side"]/div[1]/div/span/button').click()
+                    print('chat no encontrado')
 
             # Load entire chat history
             chat_is_loaded = load_selected_chat(driver)
@@ -111,6 +113,7 @@ def whatsapp_is_loaded(driver):
     print("Loading WhatsApp...", end="\r")
 
     # Open WhatsApp
+    
     driver.get('https://web.whatsapp.com/')
 
     # Check if user is already logged in
@@ -173,9 +176,20 @@ def get_chats(driver):
         # Try traversing the chat-pane
         try:
             # Find the chat search (xpath == 'Search or start new chat' element)
-            chat_search = driver.find_element("xpath",
-                #'//*[@id="side"]/div[1]/div/label/div/div[2]')
-                '/html/body/div[1]/div/div/div[2]/div[3]/div/div[1]/div/div[2]/button/div[2]/span')
+            chat_search=None
+            try:
+                chat_search = driver.find_element("xpath",'//*[@id="side"]/div[1]/div/label/div/div[2]')                
+            except:
+                print('error con el xpath //*[@id="side"]/div[1]/div/label/div/div[2]')
+            try:
+                chat_search = driver.find_element("xpath",'/html/body/div[1]/div/div/div[2]/div[3]/div/div[1]/div/div[2]/button/div[2]/span')                
+            except:
+                print('error con el xpath /html/body/div[1]/div/div/div[2]/div[3]/div/div[1]/div/div[2]/button/div[2]/span')      
+            try:
+                chat_search = driver.find_element("xpath",'//*[@id="side"]/div[1]/div/div[2]/div[2]/div/div[1]')
+            except:
+                print('error con el xpath //*[@id="side"]/div[1]/div/div[2]/div[2]/div/div[1]')    
+                   
             chat_search.click()
 
             # Count how many chat records there are below the search input by using keyboard navigation because HTML is dynamically changed depending on viewport and location in DOM
@@ -393,8 +407,23 @@ def load_selected_chat(driver):
     print("Loading messages...", end="\r")
 
     # Set focus to chat window (xpath == div element w/ aria-label set to 'Message list. Press right arrow key...')
+    
     message_list_element = driver.find_element("xpath",
-        "//*[@id='main']/div[3]/div/div/div[contains(@aria-label,'Message list')]")
+        #"//*[@id='main']/div[3]/div/div/div[contains(@aria-label,'Message list')]")
+        "//*[@id='main']/div[3]")
+    
+    for item in message_list_element.find_elements(By.TAG_NAME,"div"):
+        try:
+            if "data-pre-plain-text" in item.get_attribute('innerHTML'):
+
+                print(item.text)
+                print (item.get_attribute('innerHTML'))
+        except:
+            print('error')
+            #obtengo las posibles imagenes
+    time.sleep(500)
+    return True
+    
     message_list_element.send_keys(Keys.NULL)
 
     # Get scroll height of the chat pane div so we can calculate if new messages were loaded
@@ -503,7 +532,8 @@ def find_selected_chat(driver, selected_chat):
     chat_search.send_keys(Keys.END)
     chat_search.send_keys(Keys.SPACE)
     chat_search.send_keys(Keys.BACKSPACE)
-    print('........')
+    
+    
     # Wait for search results to load (5 sec max)
     try:
         # Look for the unique class that holds 'Search results.'
@@ -522,16 +552,34 @@ def find_selected_chat(driver, selected_chat):
 
         # Fetch the element
         search_result = driver.switch_to.active_element
-
+        time.sleep(5)
         try:
-            # Look for the chat name header and a title attribute that matches the selected chat
-            WebDriverWait(driver, 5).until(expected_conditions.presence_of_element_located(
-                (By.XPATH, f"//*[@id='main']/header/div[2]/div[1]/div/span[contains(@title,'{selected_chat}')]")))
-        except TimeoutException:
+            # Look for the chat name header and a title attribute that matches the selected chat            
+            #WebDriverWait(driver, 5).until(expected_conditions.presence_of_element_located(
+                #(By.XPATH, f"//*[@id='main']/header/div[2]/div[1]/div/span[contains(@title,'{selected_chat}')]")))
+            #    (By.XPATH, f"//*[@id='pane-side']/div[1]/div/div/div[1]/div/div/div/div[2]/div[1]/div[1]/span[contains(@title,'{selected_chat}')]")))
+            
+            driver.find_element("xpath",f"//*[@id='pane-side']/div[1]/div/div/div[1]/div/div/div/div[2]/div[1]/div[1]/span[contains(@title,'{selected_chat}')]").click()
+        except :
             print(
                 f"Error! '{selected_chat}' chat could not be loaded in WhatsApp.")
-            return False
+        try:            
+            title_element_chat=(driver.find_element("xpath","//*[@id='pane-side']/div[1]/div/div/div[1]/div/div/div/div[2]/div[1]/div[1]/div/span"))
+            if (title_element_chat.text==selected_chat):
+                title_element_chat.click()
+            else:
+                print('titulo es diferente al elemento')
+                
+            
+                                         
+        except :
+            print(
+                f"Error! '{selected_chat}' chat could not be loaded in WhatsApp.")    
+            return False                              
+
+            
         else:
+            
             # Get the chat name (xpath == span w/ title set to chat name, a descendant of header tag and anchored at top of chat window)
             chat_name_header = driver.find_element("xpath",
                 '//*[@id="main"]/header/div[2]/div[1]/div/span').get_attribute('title')
