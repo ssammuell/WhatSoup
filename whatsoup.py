@@ -72,6 +72,7 @@ def main():
             chat_is_loaded = load_selected_chat(driver)
 
         # Scrape the chat history
+        print('He cargado el chat y voy a scrapearlo....')
         scraped = scrape_chat(driver)
 
         # Export the chat
@@ -412,16 +413,7 @@ def load_selected_chat(driver):
         #"//*[@id='main']/div[3]/div/div/div[contains(@aria-label,'Message list')]")
         "//*[@id='main']/div[3]")
     
-    for item in message_list_element.find_elements(By.TAG_NAME,"div"):
-        try:
-            if "data-pre-plain-text" in item.get_attribute('innerHTML'):
-
-                print(item.text)
-                print (item.get_attribute('innerHTML'))
-        except:
-            print('error')
-            #obtengo las posibles imagenes
-    time.sleep(500)
+  
     return True
     
     message_list_element.send_keys(Keys.NULL)
@@ -603,9 +595,31 @@ def scrape_chat(driver):
     soup = BeautifulSoup(driver.page_source, 'lxml')
 
     # Get the 'Message list' element that is a container for all messages in the right chat pane
-    message_list = driver.find_element("xpath",
-        '//*[@id="main"]/div[3]/div/div/div[2]').get_attribute('class')
+    lista_mensajes=(driver.find_element("xpath",'//*[@id="main"]/div[3]'))
+    
+    sub=lista_mensajes.find_elements("xpath","//div[.//*[@data-pre-plain-text]]")
+    mylist = []
 
+    for subitem in sub:
+        if "data-pre-plain-text" in subitem.get_attribute("innerHTML"):
+            
+            mylist.append((str(subitem.get_attribute("innerHTML")).split("data-pre-plain-text")[1].split(">")[0])+"\n"+subitem.text)
+        
+    
+    mylist = list(dict.fromkeys(mylist))
+    for item in mylist:
+        print(item)
+        print("==================")
+    message_list = driver.find_element("xpath",
+        '//*[@id="main"]/div[3]/div/div/div[3]/div[1]').get_attribute('class')    
+    message_list=message_list.replace('focusable-list-item','')
+    message_list=message_list.lstrip()
+    print("------>"+str(message_list))
+    message_list=(message_list.split(" "))[0]
+    print("------>"+str(message_list))
+    
+    for msg in soup.find("div", message_list).contents:
+        print(msg)
     # Search for and only keep HTML elements which contain actual messages
     chat_messages = [
         msg for msg in soup.find("div", message_list).contents if 'message' in " ".join(msg.get('class'))]
