@@ -1,4 +1,5 @@
 import os
+import re
 import csv
 
 from bs4 import BeautifulSoup
@@ -14,9 +15,55 @@ from selenium.common.exceptions import TimeoutException, NoSuchElementException,
 from prettytable import PrettyTable
 from selenium.webdriver.common.by import By
 import time
+from pymongo.mongo_client import MongoClient
+from pymongo.server_api import ServerApi
 
 from timeit import default_timer as timer
 
+
+uri = "mongodb+srv://ssammuell:WpFlf5Hbcm1QByUb@cluster0.eybpkh4.mongodb.net/?retryWrites=true&w=majority&appName=Cluster0"
+
+# Create a new client and connect to the server
+client = MongoClient(uri, server_api=ServerApi('1'))
+# Send a ping to confirm a successful connection
+try:
+    client.admin.command('ping')
+    print("Pinged your deployment. You successfully connected to MongoDB!")
+except Exception as e:
+    print(e)
+db=client.whatsapp
+mongo_collection=db.personal
+
+
+def insertMongo(hash,msg):
+    testmsg1={
+    'hash':hash,    
+    'message':msg
+    }
+    mongo_collection.insert_one(testmsg1) 
+
+
+def demoji(data):
+    emoj = re.compile("["
+        u"\U0001F600-\U0001F64F"  # emoticons
+        u"\U0001F300-\U0001F5FF"  # symbols & pictographs
+        u"\U0001F680-\U0001F6FF"  # transport & map symbols
+        u"\U0001F1E0-\U0001F1FF"  # flags (iOS)
+        u"\U00002500-\U00002BEF"  # chinese char
+        u"\U00002702-\U000027B0"
+        u"\U000024C2-\U0001F251"
+        u"\U0001f926-\U0001f937"
+        u"\U00010000-\U0010ffff"
+        u"\u2640-\u2642" 
+        u"\u2600-\u2B55"
+        u"\u200d"
+        u"\u23cf"
+        u"\u23e9"
+        u"\u231a"
+        u"\ufe0f"  # dingbats
+        u"\u3030"
+                      "]+", re.UNICODE)
+    return re.sub(emoj, '', data)
 
 def main():
     # Setup selenium to use Chrome browser w/ profile options
@@ -37,9 +84,15 @@ def main():
     chats = get_chats(driver)
     
     
-
     # Print chat summary
-    print_chats(chats,full=True)
+    print_chats(chats,full=True)    
+    if (len(chats)>0):
+        for chat in chats:
+            chat_name=chat["name"]
+            print ("===>"+chat_name)
+            find_selected_chat(driver, chat_name)
+            scrape_chat(driver)
+            time.sleep(5)
 
     # Prompt user to select a chat for export, then locate and load it in WhatsApp
     finished = False
@@ -57,29 +110,15 @@ def main():
                     return
 
                 # Find the selected chat in WhatsApp
+                
+                selected_chat=demoji(selected_chat)                
+                #busco y hago click en el chat
                 found_selected_chat = find_selected_chat(driver, selected_chat)
-                print('---->he encontrado el chat que he filtrado:'+str(found_selected_chat))
-                chat_is_loadable = True
-                if found_selected_chat:
-                    # Break and proceed to load/scrape the chat
-                    chat_is_loadable = True
-                else:
-                    # Clear chat search
-                    #driver.find_element("xpath",'//*[@id="side"]/div[1]/div/span/button').click()
-                    print('chat no encontrado')
+                scrape_chat(driver)
 
-            # Load entire chat history
-            chat_is_loaded = load_selected_chat(driver)
+            
 
-        # Scrape the chat history
-        print('He cargado el chat y voy a scrapearlo....')
-        scraped = scrape_chat(driver)
-
-        # Export the chat
-        scrape_is_exported(selected_chat, scraped)
-
-        # Ask user if they wish to finish and exit WhatSoup
-        finished = user_is_finished()
+       
 
     # Quit WhatSoup
     print("You've quit WhatSoup.")
@@ -272,10 +311,8 @@ def get_chats(driver):
                         chats.append(chat)
 
             
-            # Navigate back to the top of the chat list
-            print('10')
-            chat_search.click()
-            print('20')
+            # Navigate back to the top of the chat list            
+            chat_search.click()            
             #chat_search.send_keys(Keys.DOWN)
             
             print("Success! Your chats have been loaded.")
@@ -371,11 +408,8 @@ def print_chats(chats, full=False):
                 is_valid_response = False
 
 
-def select_chat(chats):
-    '''Prompts the user to select a chat they want to scrape/export'''
-
-    print("\nSelect a chat export option.\n  Options:\n  chat number\t\tSelect chat for export\n  -listchats\t\tList your chats\n  -quit\t\t\tQuit the application\n")
-    while True:
+def prompt_user_to_chat(chats):
+ while True:
         # Ask user to select chat for export
         selected_chat = None
         response = input(
@@ -401,6 +435,15 @@ def select_chat(chats):
                     print(
                         f"Uh oh! The only valid options are numbers 1 - {len(chats)}. Try again.")
 
+def select_chat(chats):
+    '''Prompts the user to select a chat they want to scrape/export'''
+
+    print("\nSelect a chat export option.\n  Options:\n  chat number\t\tSelect chat for export\n  -listchats\t\tList your chats\n  -quit\t\t\tQuit the application\n")
+    print("===> numero de chats:"+str(len(chats)))
+    for number in range(len(chats)):
+        print(str(number+1))            
+   
+
 
 def load_selected_chat(driver):
     '''Loads entire chat history by repeatedly scrolling up to fetch more data from WhatsApp'''
@@ -416,83 +459,7 @@ def load_selected_chat(driver):
   
     return True
     
-    message_list_element.send_keys(Keys.NULL)
-
-    # Get scroll height of the chat pane div so we can calculate if new messages were loaded
-    current_scroll_height = driver.execute_script(
-        "return arguments[0].scrollHeight;", message_list_element)
-    previous_scroll_height = current_scroll_height
-
-    # Load all messages by scrolling up and continually checking scroll height to verify more messages have loaded
-    all_msgs_loaded = False
-    retry_attempts, success_attempts = 0, 0
-    while not all_msgs_loaded:
-        # Scroll to anchor at top of message list (fetches more messages)
-        driver.execute_script(
-            "arguments[0].scrollIntoView();", message_list_element)
-
-        # Grant some time for messages to load
-        sleep(2)
-
-        # Get scroll height of the chat pane div so we can calculate if new messages were loaded
-        previous_scroll_height = current_scroll_height
-        current_scroll_height = driver.execute_script(
-            "return arguments[0].scrollHeight;", message_list_element)
-
-        # Check if scroll height changed
-        if current_scroll_height > previous_scroll_height:
-            # New messages were loaded, reset retry counter
-            retry_attempts = 0
-
-            # Increment success attempts for user awareness
-            success_attempts += 1
-            print(
-                f"Load new messages succeeded {success_attempts} times", end="\r")
-
-            # Loop back and load more messages
-            continue
-
-        # Check if all messages were loaded or retry loading more
-        elif current_scroll_height == previous_scroll_height:
-            # All messages loaded? (xpath == 'load earlier messages' / 'loading messages...' div that is deleted from DOM after all messages have loaded)
-            loading_earlier_msgs = driver.find_element("xpath",
-                '//*[@id="main"]/div[3]/div/div/div[2]/div').get_attribute('title')
-            if 'load' not in loading_earlier_msgs:
-                all_msgs_loaded = True
-                end = timer()
-                print(
-                    f"Success! Your entire chat history has been loaded in {round(end - start)} seconds.")
-                break
-
-            # Retry loading more messages
-            else:
-                # Make sure we grant user option to exit if ~60sec of attempting to load more messages doesn't result in new messages loading
-                if retry_attempts >= 30:
-                    print("This is taking longer than usual...")
-                    while True:
-                        response = input(
-                            "Try loading more messages (y/n)? ")
-                        if response.strip().lower() in {'n', 'no'}:
-                            print(
-                                'Error! Aborting chat load by user due to loading timeout.')
-                            return False
-                        elif response.strip().lower() in {'y', 'yes'}:
-                            # Set focus to chat window again
-                            message_list_element.send_keys(Keys.NULL)
-
-                            # Reset counter
-                            retry_attempts = 0
-                            break
-                        else:
-                            continue
-
-                # Increment retry acounter and load more messages
-                else:
-                    retry_attempts += 1
-                    continue
-
-    return True
-
+    
 
 def find_selected_chat(driver, selected_chat):
     '''Searches and loads the initial chat. Returns True/False if the chat is found and can be loaded.
@@ -515,8 +482,14 @@ def find_selected_chat(driver, selected_chat):
     
     
     searchTextField=chat_search.find_element(By.TAG_NAME,"p")
-    print(searchTextField.get_attribute("outerHTML"))
+    lenTextField=len(searchTextField.text)
+    if lenTextField>0:
+        searchTextField.send_keys(lenTextField * Keys.BACKSPACE)
+    
     searchTextField.send_keys(selected_chat)
+    
+
+    
     #driver.execute_script("arguments[0].innerText = '{selected_chat}'", searchTextField)
     #driver.execute_script(f"arguments[0].innerText = 'what_you_want_to_show'", element)
    
@@ -556,35 +529,26 @@ def find_selected_chat(driver, selected_chat):
             print(
                 f"Error! '{selected_chat}' chat could not be loaded in WhatsApp.")
         try:            
-            title_element_chat=(driver.find_element("xpath","//*[@id='pane-side']/div[1]/div/div/div[1]/div/div/div/div[2]/div[1]/div[1]/div/span"))
-            if (title_element_chat.text==selected_chat):
+
+            title_element_chat=(driver.find_element("xpath","//*[@id='pane-side']/div[1]/div/div/div[1]/div/div/div/div[2]/div[1]/div[1]/div/span"))                      
+            if (title_element_chat.text==selected_chat) :
                 title_element_chat.click()
-            else:
-                print('titulo es diferente al elemento')
-                
+                return True
+            else:                
+                for item_chat in driver.find_elements("xpath","//*[@id='pane-side']/div[1]/div/div"):                
+                    for item_span in item_chat.find_elements(By.TAG_NAME,"span"):
+                        if (item_span.get_attribute("title")) and demoji(item_span.get_attribute("title"))==selected_chat:                                                        
+                            item_span.click()         
+                            return True                   
+                print('titulo es diferente al elemento -->'+selected_chat+'<==')
+
+            
             
                                          
         except :
             print(
                 f"Error! '{selected_chat}' chat could not be loaded in WhatsApp.")    
             return False                              
-
-            
-        else:
-            
-            # Get the chat name (xpath == span w/ title set to chat name, a descendant of header tag and anchored at top of chat window)
-            chat_name_header = driver.find_element("xpath",
-                '//*[@id="main"]/header/div[2]/div[1]/div/span').get_attribute('title')
-
-            # Compare searched chat name to the selected chat name
-            if chat_name_header == selected_chat:
-                print(f"Success! '{selected_chat}' was found.")
-                return True
-            else:
-                print(
-                    f"Error! '{selected_chat}' search results loaded the wrong chat: '{chat_name_header}'")
-                return False
-
 
 def scrape_chat(driver):
     '''Turns the chat into soup and scrapes it for key export information: message sender, message date/time, message contents'''
@@ -599,24 +563,27 @@ def scrape_chat(driver):
     
     sub=lista_mensajes.find_elements("xpath","//div[.//*[@data-pre-plain-text]]")
     mylist = []
+    mylist_hash=[]
 
     for subitem in sub:
-        if "data-pre-plain-text" in subitem.get_attribute("innerHTML"):
+        if "data-pre-plain-text" in subitem.get_attribute("innerHTML"):         
+            text_item=((str(subitem.get_attribute("innerHTML")).split("data-pre-plain-text")[1].split(">")[0])+"\n"+subitem.text)
+            if subitem.get_attribute("innerHTML").startswith("<div>") and ((hash(text_item)) not in mylist_hash):                
+                print(repr(text_item))  
+                print ("===================")              
+                mylist_hash.append(hash(text_item))                
+                mylist.append(text_item)
+                insertMongo(hash(text_item),text_item)
             
-            mylist.append((str(subitem.get_attribute("innerHTML")).split("data-pre-plain-text")[1].split(">")[0])+"\n"+subitem.text)
-        
     
-    mylist = list(dict.fromkeys(mylist))
-    for item in mylist:
-        print(item)
-        print("==================")
+    
+    
     message_list = driver.find_element("xpath",
         '//*[@id="main"]/div[3]/div/div/div[3]/div[1]').get_attribute('class')    
     message_list=message_list.replace('focusable-list-item','')
     message_list=message_list.lstrip()
-    print("------>"+str(message_list))
     message_list=(message_list.split(" "))[0]
-    print("------>"+str(message_list))
+    
     
     for msg in soup.find("div", message_list).contents:
         print(msg)
